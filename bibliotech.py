@@ -1,7 +1,8 @@
 # BiblioTech v1.3 - Version nettoyee
 # Gestion de la bibliotheque municipale
-# Refactorisation : code plus lisible sans changer les messages de l'application.
+# Les sorties des commandes historiques sont conservees pour faciliter la comparaison.
 
+import csv
 import os
 import sys
 from datetime import date, datetime, timedelta
@@ -82,11 +83,13 @@ class Library:
 
     @staticmethod
     def _read_rows(filename):
-        # with ferme automatiquement le fichier, meme en cas d'erreur.
-        with open(os.path.join(DATA, filename), encoding="utf-8") as file:
-            lines = file.readlines()
-        # La premiere ligne contient les noms des colonnes.
-        return [line.strip().split(";") for line in lines[1:] if line.strip()]
+        # Les champs peuvent contenir des points-virgules entre guillemets.
+        with open(
+            os.path.join(DATA, filename), encoding="utf-8", newline=""
+        ) as file:
+            reader = csv.reader(file, delimiter=";")
+            next(reader, None)
+            return [row for row in reader if any(cell.strip() for cell in row)]
 
     def load(self):
         """Charge les livres, les membres et les emprunts depuis les CSV."""
@@ -141,13 +144,17 @@ class Library:
 
     def save(self):
         """Enregistre les emprunts dans loans.csv."""
-        with open(os.path.join(DATA, "loans.csv"), "w", encoding="utf-8") as file:
-            file.write("id;member_id;book_id;start;due;returned;fee\n")
+        with open(
+            os.path.join(DATA, "loans.csv"), "w", encoding="utf-8", newline=""
+        ) as file:
+            writer = csv.writer(file, delimiter=";", lineterminator="\n")
+            writer.writerow(
+                ["id", "member_id", "book_id", "start", "due", "returned", "fee"]
+            )
             for loan in self.l:
-                file.write(
-                    f"{loan['id']};{loan['member']};{loan['book']};"
-                    f"{loan['start']};{loan['due']};{loan['returned']};"
-                    f"{loan['fee']:.2f}\n"
+                writer.writerow(
+                    [loan["id"], loan["member"], loan["book"], loan["start"],
+                     loan["due"], loan["returned"], f"{loan['fee']:.2f}"]
                 )
 
     def find(self, t, id):
@@ -176,12 +183,18 @@ class Library:
         )
         return book["copies"] - borrowed
 
+    @staticmethod
+    def _days_late(loan, end=None):
+        """Retourne le retard signe a la date de reference."""
+        reference = get_today() if end is None else end
+        return (reference - parse_date(loan["due"])).days
+
     def _has_overdue_loans(self, member_id):
         # Seuls les emprunts non rendus peuvent bloquer un nouvel emprunt.
         return any(
             loan["member"] == member_id
             and loan["returned"] == ""
-            and parse_date(loan["due"]) < get_today()
+            and self._days_late(loan) > 0
             for loan in self.l
         )
 
@@ -232,7 +245,6 @@ class Library:
             print("Refus : plus d'exemplaire disponible")
             return False
 
-        # Les retours anticipes evitent les nombreux niveaux de if imbriques.
         today = get_today()
         loan_days = LOAN_DAYS.get(book["kind"], LOAN_DAYS_BOOK)
         due = today + timedelta(days=loan_days)
@@ -278,7 +290,7 @@ class Library:
         book = self.find("b", loan["book"])
         member = self.find("m", loan["member"])
         today = get_today()
-        days_late = max((today - parse_date(loan["due"])).days, 0)
+        days_late = max(self._days_late(loan, today), 0)
         fee = late_fee(days_late, book, member)
         loan["returned"] = str(today)
         loan["fee"] = fee
@@ -298,7 +310,7 @@ class Library:
         late_loans = [
             loan
             for loan in self.l
-            if loan["returned"] == "" and parse_date(loan["due"]) < get_today()
+            if loan["returned"] == "" and self._days_late(loan) > 0
         ]
         if not late_loans:
             print("Aucun retard.")
@@ -309,8 +321,7 @@ class Library:
         for loan in late_loans:
             book = self.find("b", loan["book"])
             member = self.find("m", loan["member"])
-            # Calculer nbj avant de l'utiliser corrige une erreur du fichier initial.
-            days_late = (get_today() - parse_date(loan["due"])).days
+            days_late = self._days_late(loan)
             fee = late_fee(days_late, book, member)
             total += fee
             print(
@@ -363,7 +374,7 @@ class Library:
 
             if loan["returned"] == "":
                 current += 1
-                days_late = (get_today() - parse_date(loan["due"])).days
+                days_late = self._days_late(loan)
                 if days_late > 0:
                     overdue_count += 1
                     member = self.find("m", loan["member"])
@@ -398,21 +409,11 @@ class Library:
 
     def export(self, fname, sep):
         """Exporte les emprunts vers un fichier CSV."""
-        with open(fname, "w", encoding="utf-8") as file:
-            file.write(
-                sep.join(
-                    [
-                        "loan_id",
-                        "member",
-                        "title",
-                        "start",
-                        "due",
-                        "returned",
-                        "days_late",
-                        "fee",
-                    ]
-                )
-                + "\n"
+        with open(fname, "w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file, delimiter=sep, lineterminator="\n")
+            writer.writerow(
+                ["loan_id", "member", "title", "start", "due", "returned",
+                 "days_late", "fee"]
             )
             count = 0
             for loan in self.l:
@@ -423,22 +424,11 @@ class Library:
                     if loan["returned"]
                     else get_today()
                 )
-                days_late = max((end - parse_date(loan["due"])).days, 0)
+                days_late = max(self._days_late(loan, end), 0)
                 fee = late_fee(days_late, book, member)
-                file.write(
-                    sep.join(
-                        [
-                            loan["id"],
-                            member["name"],
-                            book["title"],
-                            loan["start"],
-                            loan["due"],
-                            loan["returned"],
-                            str(days_late),
-                            f"{fee:.2f}",
-                        ]
-                    )
-                    + "\n"
+                writer.writerow(
+                    [loan["id"], member["name"], book["title"], loan["start"],
+                     loan["due"], loan["returned"], str(days_late), f"{fee:.2f}"]
                 )
                 count += 1
         print("Export termine : " + str(count) + " lignes dans " + fname)
@@ -489,7 +479,7 @@ def show_members(lib):
         )
 
 
-# Vérifie les arguments avant d'enregistrer un emprunt.
+# Verifie les arguments avant d'enregistrer un emprunt.
 def handle_borrow(lib, args):
     if len(args) < 3:
         print("Usage : borrow <id_membre> <id_document>")
@@ -499,16 +489,17 @@ def handle_borrow(lib, args):
     return 0
 
 
-# Vérifie l'identifiant avant d'enregistrer un retour.
+# Verifie l'identifiant avant d'enregistrer un retour.
 def handle_return(lib, args):
     if len(args) < 2:
         print("Usage : return <id_emprunt>")
         return 1
+    # Le code retour historique reste 0 meme pour un emprunt inconnu.
     lib.ret(args[1])
     return 0
 
 
-# Vérifie le nom du fichier avant l'export CSV.
+# Verifie le nom du fichier avant l'export CSV.
 def handle_export(lib, args):
     if len(args) < 2:
         print("Usage : export <fichier.csv>")
@@ -517,18 +508,9 @@ def handle_export(lib, args):
     return 0
 
 
-# Ces fonctions permettent d'exécuter les commandes sans arguments.
-def handle_overdue(lib):
-    lib.overdue()
-
-
-def handle_report(lib):
-    lib.report()
-
-
-# Fonction principale : choisit la commande et renvoie son code de résultat.
+# Fonction principale : choisit la commande et renvoie son code de resultat.
 def process(args):
-    """Exécute la commande demandée par l'utilisateur."""
+    """Execute la commande demandee par l'utilisateur."""
     lib = Library()
     if not args:
         print(
@@ -540,18 +522,18 @@ def process(args):
 
     command = args[0]
 
-    # Commandes ne demandant aucun argument supplémentaire.
+    # Commandes ne demandant aucun argument supplementaire.
     simple_commands = {
         "list": show_books,
         "members": show_members,
-        "overdue": handle_overdue,
-        "report": handle_report,
+        "overdue": Library.overdue,
+        "report": Library.report,
     }
     if command in simple_commands:
         simple_commands[command](lib)
         return 0
 
-    # Commandes qui vérifient leurs propres arguments.
+    # Commandes qui verifient leurs propres arguments.
     commands_with_args = {
         "borrow": handle_borrow,
         "return": handle_return,
