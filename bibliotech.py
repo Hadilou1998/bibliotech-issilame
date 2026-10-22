@@ -51,23 +51,26 @@ def parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
-def late_fee(days, book, member):
+def late_fee(days_late: int, kind: str, member_type: str, price: float,) -> float:
+    """Pénalité de retard, réduite selon le membre et plafonnée au prix."""
+
     # Aucun frais lorsque le document n'est pas en retard.
-    if days <= 0:
+    if days_late <= 0:
         return 0.0
 
     # Un type de document inconnu utilise le tarif d'un livre.
-    daily_fee = DAILY_FEES.get(book["kind"], DAILY_FEE_BOOK)
-    fee = days * daily_fee
+    daily_rate = DAILY_FEES.get(kind, DAILY_FEE_BOOK)
 
-    # Les etudiants paient la moitie et les membres premium ne paient rien.
-    if member["type"] == "student":
+    fee = days_late * daily_rate
+
+    # Les etudiants paient la moitié du frais et les membres premium ne paient rien.
+    if member_type == "student":
         fee *= STUDENT_DISCOUNT
-    elif member["type"] == "premium":
+    elif member_type == "premium":
         fee = 0
 
     # La penalite ne peut pas depasser le prix du document.
-    return round(min(fee, book["price"]), 2)
+    return round(min(fee, price), 2)
 
 
 class Library:
@@ -291,7 +294,7 @@ class Library:
         member = self.find("m", loan["member"])
         today = get_today()
         days_late = max(self._days_late(loan, today), 0)
-        fee = late_fee(days_late, book, member)
+        fee = late_fee(days_late, book["kind"], member["type"], book["price"])
         loan["returned"] = str(today)
         loan["fee"] = fee
         self.save()
@@ -322,7 +325,7 @@ class Library:
             book = self.find("b", loan["book"])
             member = self.find("m", loan["member"])
             days_late = self._days_late(loan)
-            fee = late_fee(days_late, book, member)
+            fee = late_fee(days_late, book["kind"], member["type"], book["price"])
             total += fee
             print(
                 loan["id"]
@@ -378,7 +381,12 @@ class Library:
                 if days_late > 0:
                     overdue_count += 1
                     member = self.find("m", loan["member"])
-                    outstanding += late_fee(days_late, book, member)
+                    outstanding += late_fee(
+                        days_late,
+                        book["kind"],
+                        member["type"],
+                        book["price"],
+                    )
             else:
                 collected += loan["fee"]
 
@@ -425,7 +433,7 @@ class Library:
                     else get_today()
                 )
                 days_late = max(self._days_late(loan, end), 0)
-                fee = late_fee(days_late, book, member)
+                fee = late_fee(days_late, book["kind"], member["type"], book["price"])
                 writer.writerow(
                     [loan["id"], member["name"], book["title"], loan["start"],
                      loan["due"], loan["returned"], str(days_late), f"{fee:.2f}"]
