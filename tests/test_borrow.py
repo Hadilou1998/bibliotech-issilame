@@ -52,3 +52,11 @@ def test_successful_borrow(library, capsys):
     assert loan["returned"] == ""
 
     assert "Emprunt L013 enregistre" in capsys.readouterr().out
+
+def test_member_with_overdue_loan_is_refused(library, capsys):
+    # Un emprunt en retard bloque tout nouvel emprunt.
+    result = library.borrow_document("M001", "B002")
+
+    # Vérifier que l'opération a échoué.
+    assert result is False
+    assert "Refus : emprunts en retard" in capsys.readouterr().out
