@@ -51,23 +51,26 @@ def parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
-def late_fee(days, book, member):
+def late_fee(days_late: int, kind: str, member_type: str, price: float,) -> float:
+    """Pénalité de retard, réduite selon le membre et plafonnée au prix."""
+
     # Aucun frais lorsque le document n'est pas en retard.
-    if days <= 0:
+    if days_late <= 0:
         return 0.0
 
     # Un type de document inconnu utilise le tarif d'un livre.
-    daily_fee = DAILY_FEES.get(book["kind"], DAILY_FEE_BOOK)
-    fee = days * daily_fee
+    daily_rate = DAILY_FEES.get(kind, DAILY_FEE_BOOK)
 
-    # Les etudiants paient la moitie et les membres premium ne paient rien.
-    if member["type"] == "student":
+    fee = days_late * daily_rate
+
+    # Les etudiants paient la moitié du frais et les membres premium ne paient rien.
+    if member_type == "student":
         fee *= STUDENT_DISCOUNT
-    elif member["type"] == "premium":
+    elif member_type == "premium":
         fee = 0
 
     # La penalite ne peut pas depasser le prix du document.
-    return round(min(fee, book["price"]), 2)
+    return round(min(fee, price), 2)
 
 
 class Library:
@@ -212,55 +215,56 @@ class Library:
         maximum = max((int(loan["id"][1:]) for loan in self.l), default=0)
         return "L" + str(maximum + 1).zfill(3)
 
-    def borrow_document(self, mid, bid):
-        """Enregistre un emprunt apres verification des regles de la bibliotheque."""
-        member = self.find("m", mid)
-        if member is None:
-            print("Erreur : membre inconnu")
-            return False
+    def refusal_reason(self, member, book):
+        """Retourne la raison de refus ou None si l'emprunt est autorisé."""
 
-        book = self.find("b", bid)
-        if book is None:
-            print("Erreur : livre inconnu")
-            return False
+        member_id = member["id"]
+        book_id = book["id"]
 
+        # L'ordre des contrôles est conservé pour respecter le comportement initial.
         if not member["active"]:
-            print("Refus : membre inactif")
-            return False
+            return "Refus : membre inactif"
 
-        if self._has_overdue_loans(mid):
-            print("Refus : emprunts en retard")
-            return False
+        if self.has_overdue_loan(member_id):
+            return "Refus : emprunts en retard"
 
         max_loans = MAX_LOANS.get(member["type"], MAX_LOANS_DEFAULT)
-        if self.nb(mid) >= max_loans:
-            print("Refus : limite d'emprunts atteinte (" + str(max_loans) + ")")
-            return False
 
-        if self._already_borrowed(mid, bid):
-            print("Refus : deja emprunte par ce membre")
-            return False
+        if self.nb(member_id) >= max_loans:
+            return f"Refus : limite d'emprunts atteinte ({max_loans})"
 
-        if self.dispo(bid) <= 0:
-            print("Refus : plus d'exemplaire disponible")
-            return False
+        if self._already_borrowed(member_id, book_id):
+            return "Refus : deja emprunte par ce membre"
+
+        if self.dispo(book_id) <= 0:
+            return "Refus : plus d'exemplaire disponible"
+
+        return None
+
+    def create_loan(self, member, book):
+        """Crée et sauvegarde un nouvel emprunt autorisé."""
 
         today = get_today()
+
+        # La durée dépend du type de document
         loan_days = LOAN_DAYS.get(book["kind"], LOAN_DAYS_BOOK)
         due = today + timedelta(days=loan_days)
+
         new_id = self._next_loan_id()
-        self.l.append(
-            {
-                "id": new_id,
-                "member": mid,
-                "book": bid,
-                "start": str(today),
-                "due": str(due),
-                "returned": "",
-                "fee": 0,
-            }
-        )
+
+        loan = {
+            "id": new_id,
+            "member": member["id"],
+            "book": book["id"],
+            "start": str(today),
+            "due": str(due),
+            "returned": "",
+            "fee": 0,
+        }
+
+        self.l.append(loan)
         self.save()
+
         print(
             "Emprunt "
             + new_id
@@ -271,7 +275,39 @@ class Library:
             + ", retour avant le "
             + str(due)
         )
+
         return True
+
+    def borrow_document(self, mid, bid):
+        """Enregistre un emprunt apres verification des regles de la bibliotheque."""
+
+        member = self.find("m", mid)
+
+        if member is None:
+            print("Erreur : membre inconnu")
+            return False
+
+        book = self.find("b", bid)
+
+        if book is None:
+            print("Erreur : livre inconnu")
+            return False
+
+        reason = self.refusal_reason(member, book)
+
+        if reason is not None:
+            print(reason)
+            return False
+
+        return self.create_loan(member, book)
+
+    def borrow(self, member_id, book_id):
+        """Point d'entrée principale pour emprunter un document."""
+        return self.borrow_document(member_id, book_id)
+
+    def has_overdue_loan(self, member_id):
+        """Indique si le membre a un emprunt en retard."""
+        return self._has_overdue_loans(member_id)
 
     def do_stuff(self, mid, bid):
         # Ancien nom conserve pour ne pas casser les appels externes existants.
@@ -291,7 +327,7 @@ class Library:
         member = self.find("m", loan["member"])
         today = get_today()
         days_late = max(self._days_late(loan, today), 0)
-        fee = late_fee(days_late, book, member)
+        fee = late_fee(days_late, book["kind"], member["type"], book["price"])
         loan["returned"] = str(today)
         loan["fee"] = fee
         self.save()
@@ -322,7 +358,7 @@ class Library:
             book = self.find("b", loan["book"])
             member = self.find("m", loan["member"])
             days_late = self._days_late(loan)
-            fee = late_fee(days_late, book, member)
+            fee = late_fee(days_late, book["kind"], member["type"], book["price"])
             total += fee
             print(
                 loan["id"]
@@ -378,7 +414,12 @@ class Library:
                 if days_late > 0:
                     overdue_count += 1
                     member = self.find("m", loan["member"])
-                    outstanding += late_fee(days_late, book, member)
+                    outstanding += late_fee(
+                        days_late,
+                        book["kind"],
+                        member["type"],
+                        book["price"],
+                    )
             else:
                 collected += loan["fee"]
 
@@ -425,7 +466,7 @@ class Library:
                     else get_today()
                 )
                 days_late = max(self._days_late(loan, end), 0)
-                fee = late_fee(days_late, book, member)
+                fee = late_fee(days_late, book["kind"], member["type"], book["price"])
                 writer.writerow(
                     [loan["id"], member["name"], book["title"], loan["start"],
                      loan["due"], loan["returned"], str(days_late), f"{fee:.2f}"]
@@ -484,7 +525,7 @@ def handle_borrow(lib, args):
     if len(args) < 3:
         print("Usage : borrow <id_membre> <id_document>")
         return 1
-    if lib.borrow_document(args[1], args[2]) is False:
+    if lib.borrow(args[1], args[2]) is False:
         return 2
     return 0
 
