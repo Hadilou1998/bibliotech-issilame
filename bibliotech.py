@@ -393,14 +393,33 @@ class Library:
 
     def report_loan_statistics(self):
         """Calcule les statistiques des emprunts pour le rapport."""
-        (
-            current,
-            overdue_count,
-            collected,
-            outstanding,
-            book_counts,
-            type_counts,
-        ) = self.report_loan_statistics()
+        current = 0
+        overdue_count = 0
+        collected = 0
+        outstanding = 0
+        book_counts = {}
+        type_counts = {}
+
+        for loan in self.l:
+            book_counts[loan["book"]] = book_counts.get(loan["book"], 0) + 1
+            book = self.find("b", loan["book"])
+            type_counts[book["kind"]] = type_counts.get(book["kind"], 0) + 1
+
+            if loan["returned"] == "":
+                current += 1
+                days_late = self._days_late(loan)
+
+                if days_late > 0:
+                    overdue_count += 1
+                    member = self.find("m", loan["member"])
+                    outstanding += late_fee(
+                        days_late,
+                        book["kind"],
+                        member["type"],
+                        book["price"],
+                    )
+            else:
+                collected += loan["fee"]
 
         return (
             current,
@@ -420,33 +439,14 @@ class Library:
         active_members = sum(1 for member in self.m if member["active"])
         print(f"Membres : {len(self.m)} dont {active_members} actifs")
 
-        current = 0
-        overdue_count = 0
-        collected = 0
-        outstanding = 0
-        book_counts = {}
-        type_counts = {}
-
-        for loan in self.l:
-            # Ces compteurs servent au classement des documents et des types.
-            book_counts[loan["book"]] = book_counts.get(loan["book"], 0) + 1
-            book = self.find("b", loan["book"])
-            type_counts[book["kind"]] = type_counts.get(book["kind"], 0) + 1
-
-            if loan["returned"] == "":
-                current += 1
-                days_late = self._days_late(loan)
-                if days_late > 0:
-                    overdue_count += 1
-                    member = self.find("m", loan["member"])
-                    outstanding += late_fee(
-                        days_late,
-                        book["kind"],
-                        member["type"],
-                        book["price"],
-                    )
-            else:
-                collected += loan["fee"]
+        (
+            current,
+            overdue_count,
+            collected,
+            outstanding,
+            book_counts,
+            type_counts,
+        ) = self.report_loan_statistics()
 
         print(
             "Emprunts : "
