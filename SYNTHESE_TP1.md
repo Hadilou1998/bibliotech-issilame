@@ -1,8 +1,9 @@
 # TP1 — Clean Code et qualité logicielle
+
 ## Projet BiblioTech — Compte-rendu des travaux
 
 **Projet :** BiblioTech, gestion d'une bibliothèque municipale  
-**Dépôt GitHub :** https://github.com/Hadilou1998/bibliotech-issilame  
+**Dépôt GitHub :** [Consulter le dépôt Bibliotech](https://github.com/Hadilou1998/bibliotech-issilame)  
 **Branche de travail :** `tp1/nettoyage`  
 **Fichier principal :** `bibliotech.py`  
 **Date du bilan :** 21 octobre 2026
