@@ -391,6 +391,26 @@ class Library:
             )
         print("Total des penalites en cours : " + f"{total:.2f}" + " EUR")
 
+    def report_loan_statistics(self):
+        """Calcule les statistiques des emprunts pour le rapport."""
+        (
+            current,
+            overdue_count,
+            collected,
+            outstanding,
+            book_counts,
+            type_counts,
+        ) = self.report_loan_statistics()
+
+        return (
+            current,
+            overdue_count,
+            collected,
+            outstanding,
+            book_counts,
+            type_counts,
+        )
+
     def report(self):
         """Affiche les statistiques generales de la bibliotheque."""
         print("=== RAPPORT BIBLIOTECH ===")
