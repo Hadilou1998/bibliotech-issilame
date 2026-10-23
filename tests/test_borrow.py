@@ -6,6 +6,7 @@ def test_inactive_member_is_refused(library, capsys):
     assert result is False
     assert "Refus : membre inactif" in capsys.readouterr().out
 
+
 def test_already_borrowed_document_is_refused(library, capsys):
     # Un membre ne peut pas emprunter deux fois le même document.
     result = library.borrow_document("M005", "B001")
@@ -14,6 +15,7 @@ def test_already_borrowed_document_is_refused(library, capsys):
     assert result is False
     assert "Refus : deja emprunte par ce membre" in capsys.readouterr().out
 
+
 def test_unavailable_document_is_refused(library, capsys):
     # Aucun emprunt si tous les exemplaires sont déjà pris.
     result = library.borrow_document("M005", "B003")
@@ -21,6 +23,7 @@ def test_unavailable_document_is_refused(library, capsys):
     # Vérifier que l'opération a échoué.
     assert result is False
     assert "Refus : plus d'exemplaire disponible" in capsys.readouterr().out
+
 
 def test_member_loan_limit_is_refused(library, capsys):
     # Les emprunts successifs utilisent uniquement les données temporaires.
@@ -35,6 +38,7 @@ def test_member_loan_limit_is_refused(library, capsys):
     # Vérifier que l'opération a échoué.
     assert result is False
     assert "Refus : limite d'emprunts atteinte" in capsys.readouterr().out
+
 
 def test_successful_borrow(library, capsys):
     # Un emprunt autorisé doit être enregistré avec la bonne échéance.
@@ -52,6 +56,7 @@ def test_successful_borrow(library, capsys):
     assert loan["returned"] == ""
 
     assert "Emprunt L013 enregistre" in capsys.readouterr().out
+
 
 def test_member_with_overdue_loan_is_refused(library, capsys):
     # Un emprunt en retard bloque tout nouvel emprunt.

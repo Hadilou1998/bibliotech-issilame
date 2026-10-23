@@ -52,7 +52,12 @@ def parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
-def late_fee(days_late: int, kind: str, member_type: str, price: float,) -> float:
+def late_fee(
+    days_late: int,
+    kind: str,
+    member_type: str,
+    price: float,
+) -> float:
     """Pénalité de retard, réduite selon le membre et plafonnée au prix."""
 
     # Aucun frais lorsque le document n'est pas en retard.
@@ -88,9 +93,7 @@ class Library:
     @staticmethod
     def _read_rows(filename):
         # Les champs peuvent contenir des points-virgules entre guillemets.
-        with open(
-            os.path.join(DATA, filename), encoding="utf-8", newline=""
-        ) as file:
+        with open(os.path.join(DATA, filename), encoding="utf-8", newline="") as file:
             reader = csv.reader(file, delimiter=";")
             next(reader, None)
             return [row for row in reader if any(cell.strip() for cell in row)]
@@ -157,8 +160,15 @@ class Library:
             )
             for loan in self.l:
                 writer.writerow(
-                    [loan["id"], loan["member"], loan["book"], loan["start"],
-                     loan["due"], loan["returned"], f"{loan['fee']:.2f}"]
+                    [
+                        loan["id"],
+                        loan["member"],
+                        loan["book"],
+                        loan["start"],
+                        loan["due"],
+                        loan["returned"],
+                        f"{loan['fee']:.2f}",
+                    ]
                 )
 
     def find(self, t, id):
@@ -172,18 +182,14 @@ class Library:
     def nb(self, mid):
         """Compte les emprunts encore en cours pour un membre."""
         return sum(
-            1
-            for loan in self.l
-            if loan["member"] == mid and loan["returned"] == ""
+            1 for loan in self.l if loan["member"] == mid and loan["returned"] == ""
         )
 
     def dispo(self, bid):
         """Calcule le nombre d'exemplaires disponibles."""
         book = self.find("b", bid)
         borrowed = sum(
-            1
-            for loan in self.l
-            if loan["book"] == bid and loan["returned"] == ""
+            1 for loan in self.l if loan["book"] == bid and loan["returned"] == ""
         )
         return book["copies"] - borrowed
 
@@ -392,9 +398,7 @@ class Library:
         copies = sum(book["copies"] for book in self.b)
         print(f"Titres : {len(self.b)} ({copies} exemplaires)")
         active_members = sum(1 for member in self.m if member["active"])
-        print(
-            f"Membres : {len(self.m)} dont {active_members} actifs"
-        )
+        print(f"Membres : {len(self.m)} dont {active_members} actifs")
 
         current = 0
         overdue_count = 0
@@ -445,32 +449,42 @@ class Library:
         )
         print("Top 3 :")
         for position, (negative_count, title) in enumerate(ranking[:3], start=1):
-            print(
-                f"  {position}. {title} ({-negative_count})"
-            )
+            print(f"  {position}. {title} ({-negative_count})")
 
     def export(self, fname, sep):
         """Exporte les emprunts vers un fichier CSV."""
         with open(fname, "w", encoding="utf-8", newline="") as file:
             writer = csv.writer(file, delimiter=sep, lineterminator="\n")
             writer.writerow(
-                ["loan_id", "member", "title", "start", "due", "returned",
-                 "days_late", "fee"]
+                [
+                    "loan_id",
+                    "member",
+                    "title",
+                    "start",
+                    "due",
+                    "returned",
+                    "days_late",
+                    "fee",
+                ]
             )
             count = 0
             for loan in self.l:
                 book = self.find("b", loan["book"])
                 member = self.find("m", loan["member"])
-                end = (
-                    parse_date(loan["returned"])
-                    if loan["returned"]
-                    else get_today()
-                )
+                end = parse_date(loan["returned"]) if loan["returned"] else get_today()
                 days_late = max(self._days_late(loan, end), 0)
                 fee = late_fee(days_late, book["kind"], member["type"], book["price"])
                 writer.writerow(
-                    [loan["id"], member["name"], book["title"], loan["start"],
-                     loan["due"], loan["returned"], str(days_late), f"{fee:.2f}"]
+                    [
+                        loan["id"],
+                        member["name"],
+                        book["title"],
+                        loan["start"],
+                        loan["due"],
+                        loan["returned"],
+                        str(days_late),
+                        f"{fee:.2f}",
+                    ]
                 )
                 count += 1
         print("Export termine : " + str(count) + " lignes dans " + fname)
@@ -485,9 +499,7 @@ class Library:
     def run_plugins(self, event, payload=None):
         """Execute les extensions par ordre de priorite."""
         results = []
-        for name in sorted(
-            self.plugins, key=lambda key: self.plugins[key]["priority"]
-        ):
+        for name in sorted(self.plugins, key=lambda key: self.plugins[key]["priority"]):
             try:
                 results.append(
                     self.plugins[name]["fn"](
@@ -496,9 +508,7 @@ class Library:
                 )
             except Exception:
                 # Signaler l'erreur sans interrompre les autres extensions
-                logging.exception(
-                    "Erreur lors de l'execution de l'extension %s", name
-                )
+                logging.exception("Erreur lors de l'execution de l'extension %s", name)
         return results
 
 
@@ -557,8 +567,7 @@ def process(args):
     lib = Library()
     if not args:
         print(
-            "Usage : python bibliotech.py <commande> "
-            "[arguments] [--today AAAA-MM-JJ]"
+            "Usage : python bibliotech.py <commande> [arguments] [--today AAAA-MM-JJ]"
         )
         print("Commandes : list, members, borrow, return, overdue, report, export")
         return 1
