@@ -20,7 +20,6 @@ from bibliotech import late_fee
         (4, "unknown", "standard", 20.0, 2.0),
     ],
 )
-
 def test_late_fee(days_late, kind, member_type, price, expected):
     # Le montant doit respecter les règles de pénalité
     result = late_fee(days_late, kind, member_type, price)
