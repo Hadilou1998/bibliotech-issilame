@@ -3,6 +3,7 @@
 # Les sorties des commandes historiques sont conservees pour faciliter la comparaison.
 
 import csv
+import logging
 import os
 import sys
 from datetime import date, datetime, timedelta
@@ -494,9 +495,10 @@ class Library:
                     )
                 )
             except Exception:
-                # Conserver le comportement initial : une extension en erreur
-                # n'empeche pas les autres extensions de fonctionner.
-                continue
+                # Signaler l'erreur sans interrompre les autres extensions
+                logging.exception(
+                    "Erreur lors de l'execution de l'extension %s", name
+                )
         return results
 
 
